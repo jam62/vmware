@@ -1,2 +1,2 @@
 # vmware
-Just powershell/cmd commands for apply some settings.
+PowerCLI scripts for VMWare / vCenter
