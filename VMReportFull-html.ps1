@@ -1,5 +1,5 @@
-﻿
-$viserver = 'vcenter-01.domain.local'
+
+$viserver = 'eik-vcenter-01.domain.local'
 
 $Scriptpath = Split-Path $MyInvocation.MyCommand.path
 $user = "reporter@vsphere.local"
@@ -14,19 +14,6 @@ Connect-VIServer $viserver -Credential $cred -ErrorAction Stop
 
 $HTMLPath = "C:\inetpub\wwwroot\vmreportfull\index.html"
 
-# Функция записи лога
-function Write-Log
-{
-Param ([string]$LogString )
-$fLogN = 'log.txt'
-$LogPath = $Scriptpath
-$LogFile = $LogPath + "\" +  $fLogN
-If (!(Test-Path $LogFile)) {md $LogPath; New-Item -path $LogPath -name $fLogN -itemType File}
-$Stamp = (Get-Date).toString("dd.MM.yyyy  HH:mm:ss")
-$LogMessage = "$Stamp   $LogString"
-Add-content $LogFile -value $LogMessage -Encoding UTF8
-}
-
 Clear-Host
 $AllVMCount = 0
 $AllCPU = 0
@@ -36,11 +23,12 @@ $Report = @()
 $date = Get-Date -Format "dd.MM.yyyy HH:mm"
 
 # VMHostInfo
+
 $VMHostlist = Get-VMHost -State Connected| sort-object | select name -Unique
+    
     foreach($VMHost in $VMHostList.name) {
     $VMHostTable = @()
-    Write-Host "`n----------- Сервер: $VMWHost -----------"
- #   Write-Log  "----------- Сервер: $VMWHost -----------"     
+    Write-Host "`n----------- Сервер: $VMHost -----------"
     $esxi = get-vmhost $vmhost
     $model = $esxi.Manufacturer +" "+ $esxi.Model
 
@@ -51,12 +39,6 @@ $VMHostlist = Get-VMHost -State Connected| sort-object | select name -Unique
     $HostUsageMem = [math]::Round($esxi.MemoryUsageGB)
     $HostUsagePercent = [math]::Round(100 * $HostUsageMem / $HostTotalMem)
     
-    $DataStores = Get-Datastore -VMHost $VMHost | where { (($Datastore.Name -notlike "*ISO*") -and ($_.State -ne "Maintenance")) }
-    $Storage = $DataStores | Sort-Object FreeSpaceGB -Descending | Select Name,FreeSpaceGB,CapacityGB -First 1
-    $StorageTotal = [math]::Round($Storage.CapacityGB )
-    $StorageFree =  [math]::Round($Storage.FreeSpaceGB)
-    $StoragUsagePercent = [math]::Round(100 * ($StorageTotal - $StorageFree) / $StorageTotal)
-                                                      
     $HostReport = [PSCustomObject] @{
         "Name" = $esxi
         "Model" =  $model
@@ -68,13 +50,39 @@ $VMHostlist = Get-VMHost -State Connected| sort-object | select name -Unique
         "Memory Total Gb" = $HostTotalMem
         "Memory Usage Gb" = $HostUsageMem
         "Memory Usage %" = $HostUsagePercent
-        "Storage Total Gb" = $StorageTotal
-        "Storage Free Gb" = $StorageFree
-        "Storage Usage %" = $StoragUsagePercent
-    } 
+
+        } 
     $VMHostTable += $HostReport
     }
     $Report += $VMHostTable |ConvertTo-HTML -Fragment -PreContent "<h3>VMHost information</h3>" | Out-String 
+
+# Datastores Info
+    
+$DataStores = Get-Datastore | where { (($Datastore.Name -notlike "*ISO*") -and ($_.State -ne "Maintenance")) }
+foreach ($Storage in $DataStores) 
+    {
+    $DSTable = @()
+    $DSName = (Get-Datastore $Storage).name
+    $StorageTotal = [math]::Round($Storage.CapacityGB )
+    $StorageFree =  [math]::Round($Storage.FreeSpaceGB)
+    $StoragUsagePercent = [math]::Round(100 * ($StorageTotal - $StorageFree) / $StorageTotal)
+    $StorageUncommitted = [math]::Round(($Storage.ExtensionData.Summary.Uncommitted)/1Gb)
+    $ProbablyCommitmentSize = [math]::Round($StorageUncommitted / 10)
+        
+    $DSReport = [PSCustomObject] @{
+        "Name" = $DSName
+        "Storage Total Gb" = $StorageTotal
+        "Storage Free Gb" = $StorageFree
+        "Storage Usage %" = $StoragUsagePercent
+        "Uncommitted Gb" = $StorageUncommitted
+        "Probably Uncommitted Allocation (10%) GB"= $ProbablyCommitmentSize
+        }
+    $DSTable += $DSReport
+    }
+
+    $Report += $DSTable | ConvertTo-HTML -Fragment -PreContent "<h3>Datastore Information</h3>" | Out-String
+    
+# Folders
 
 $folders = get-folder -Type VM | Where-Object {($_.name -ne 'vm') -and ($_.name -ne 'prod')} | sort
 
@@ -86,8 +94,8 @@ Foreach  ($folder in $folders)
     $FolderMemorySet = 0
     $FolderStorageUse = 0
     Write-Host "`n----------- Папка: $folder -----------"
-    Write-Log  "----------- Папка: $folder -----------"          
-    $vms = (Get-VM -Location $folder) |sort
+    
+    $vms = (Get-VM -Location $folder) | sort
         # Foreach VM
         Foreach ($vm in $vms)  
         {
@@ -95,8 +103,9 @@ Foreach  ($folder in $folders)
         $vmHostName = $vm.Guest.HostName
         $NumCPU = $vm.NumCpu
         $MemorySet = $vm.MemoryGB
-        #$MemoryUse = [math]::Round(($vm | get-view).summary.QuickStats.GuestMemoryUsage/1024,2)
+        $MemoryUse = [math]::Round(($vm | get-view).summary.QuickStats.GuestMemoryUsage/1024,2)
         $StorageUse = [math]::Round($VM.UsedSpaceGB)
+        $ProvisionedSpace = [math]::round($VM.ProvisionedSpaceGB)
                 
         # CustomAttributes
         $Role = ($vm| Get-Annotation -CustomAttribute "Role").value
@@ -105,7 +114,7 @@ Foreach  ($folder in $folders)
                 
         # PowerState
         if ($VM.PowerState -eq "PoweredOn") {$power="ON"}
-        elseif ($VM.PowerState -eq "PoweredOff") {$power="OFF"}
+        elseif ($VM.PowerState -eq "PoweredOff") {$power=""}
         else {$power="n/a"}
 
         # Autostart
@@ -127,29 +136,29 @@ Foreach  ($folder in $folders)
         if ($OS -match "(64-bit)") {$OS = $OS.Replace(' (64-bit)','')}
                                                
         $VMReport = [PSCustomObject] @{
-            #"Folder" = ''
             "VM" = $vmname 
             "HostName" = $vmHostName
             "CPU" = $NumCPU
             "Memory(Gb)" = $MemorySet
-            #"MemoryUse(Gb)" = $MemoryUse
-            "Storage Used(Gb)" = $StorageUse
+            "MemoryUsed(Gb)" = $MemoryUse
+            "StorageUsed(Gb)" = $StorageUse
+            "MaxVMSize(Gb)" = $ProvisionedSpace
             "IP" = $ips
             "OS" = $OS
             "Power" = $power
             "VMTools" = $VMTools
             "Owner" = $Owner
-            "Function" = $Function
+            "Functional" = $Function
             "Autostart" = $autostart
             }
 
         Write-Host $vm.name 
-        Write-Log "$vm"
+ 
         $FolderCPU += $NumCPU
         $FolderMemorySet += $MemorySet
         $FolderMemoryUse += $MemoryUse
         $FolderStorageUse += $StorageUse
-    
+        
         $VMTable += $VMReport  
 
         } # Foreach VM end
@@ -157,38 +166,34 @@ Foreach  ($folder in $folders)
         $Report += $VMTable |ConvertTo-HTML -Fragment -PreContent "<h3>Folder: $folder</h3>" | Out-String 
 
     Write-Host "-----------" 
-    Write-Log  "-----------" 
     Write-Host "Всего ВМ:" $vms.count
-    Write-Log "Всего ВМ:"
-    Write-Log $vms.count
+
     $FolderSummary = [PSCustomObject] @{
         "Folder Summary" = $folder
         "VM Count" = $vms.count
         "CPU Cores Used" = $FolderCPU
         "Memory(GB) Summary" = $FolderMemorySet
         "Storage Used(Gb) Summary" = $FolderStorageUse
-        #"Power" = ''
-    }
+        }
 
     $AllVMCount += $vms.count
     $AllCPU += $FolderCPU
     $AllMemorySet += $FolderMemorySet
-
+    
     $Report += $FolderSummary | ConvertTo-HTML -Fragment | Out-String
     } # Foreach  folder end
  
+$poweredvmcount = (get-vm | where PowerState -eq "PoweredOn").count
+$OverAllVMCount = (get-vM).count
+
 Write-Host "`n---------------------------------------" 
-Write-Log "---------------------------------------" 
 Write-Host "Всего папок: "$folders.count""
-Write-Log "Всего папок:"
-Write-Log $folders.count
-Write-Host "Всего ВМ во всех папках: $AllVMCount"
-Write-Log "Всего ВМ во всех папках:"
-Write-Log $AllVMCount
+Write-Host "Всего ВМ во всех папках: $OverAllVMCount"
 
 $Overall = [PSCustomObject] @{
         "Folders" =$folders.count
-        "Overall VM Count" = $AllVMCount
+        "Overall VM Count" = $OverAllVMCount
+        "Powered On VM" = $poweredvmcount
         "CPU Cores Used" = $AllCPU
         "Memory(GB) Summary" = $AllMemorySet
         "Storage Used(Gb) Summary" = $FolderStorageUse
@@ -208,6 +213,7 @@ table {border-collapse: collapse;width: 100%;}
 table, th, td {border: 1px solid black;height: 25px;text-align: Center;font-weight: bold;}
 </style>
 "@
+
 
 ConvertTo-HTML -head $head -PostContent $Report -Body "<h2>VM Inventory for $VIserver ($date)</h2>" | Set-Content -Path $HTMLPath -Encoding UTF8 -ErrorAction Stop
 
