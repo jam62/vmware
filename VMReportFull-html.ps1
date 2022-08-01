@@ -214,11 +214,7 @@ table, th, td {border: 1px solid black;height: 25px;text-align: Center;font-weig
 </style>
 "@
 
-
 ConvertTo-HTML -head $head -PostContent $Report -Body "<h2>VM Inventory for $VIserver ($date)</h2>" | Set-Content -Path $HTMLPath -Encoding UTF8 -ErrorAction Stop
-
-#Load report in default browser
-#Invoke-Item $HTMLPath
 
 # Отключение от vCenter / vCenter Disconnonect
 Disconnect-VIServer $viserver -Confirm:$False
