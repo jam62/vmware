@@ -1,5 +1,5 @@
 
-$viserver = 'eik-vcenter-01.domain.local'
+$viserver = 'vcenter-01.domain.local'
 
 $Scriptpath = Split-Path $MyInvocation.MyCommand.path
 $user = "reporter@vsphere.local"
