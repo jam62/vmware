@@ -8,6 +8,8 @@ Set-pscred.ps1   - Using encrypted password file for authentification within scr
 
 Template.ps1   -  Windows VM initial configuration after deployment.
 
+VM-Snapshot-mngmt.ps1  - VM Snapshot management. Shutting down VM, creating new snapshot or reverting existing one, and starting up VM.
+
 VMReportFull-html.ps1  - VM Inventory Script. Creates html report.
 
 
