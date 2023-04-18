@@ -2,9 +2,9 @@
 PowerCLI scripts for VMWare / vCenter
 --------------------------------------
 
-Set-CustomAttributes.ps1  - Set custom attributes for VM, including VM creation time.
+Set-CustomAttributes.ps1  - Sets custom attributes for VM, including VM creation time.
 
-Set-pscred.ps1   - Using encrypted password file for authentification within scripts.
+Set-pscred.ps1   - Helps to use encrypted password file for authentification within scripts.
 
 Template.ps1   -  Windows VM initial configuration after deployment.
 
