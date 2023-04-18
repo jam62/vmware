@@ -4,7 +4,7 @@ $viserver = 'vcenter-01.domain.local'
 $Scriptpath = Split-Path $MyInvocation.MyCommand.path
 $user = "reporter@vsphere.local"
 $pscred = $Scriptpath+"\pscred-reporter.txt"
-#$pscred = "C:\Scripts\vmreportfull\pscred-reporter.txt"
+#$pscred = "C:\Scripts\vmreport\pscred-reporter.txt"
 [Byte[]] $key = (1..24)
 $pass = get-content $pscred | convertto-securestring -Key $key 
 $pass.Makereadonly()
@@ -12,7 +12,7 @@ $cred = New-Object System.Management.Automation.PsCredential $user, $pass
 
 Connect-VIServer $viserver -Credential $cred -ErrorAction Stop
 
-$HTMLPath = "C:\inetpub\wwwroot\vmreportfull\index.html"
+$HTMLPath = "C:\inetpub\wwwroot\vmreport\index.html"
 
 Clear-Host
 $AllVMCount = 0
