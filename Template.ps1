@@ -21,7 +21,6 @@ Write-Log "--------------------------------------------"
 
 ### Firewall Disable
 Set-NetFirewallProfile -All -Enabled False -ErrorVariable err
-# Get-NetFirewallProfile |select Name,Enabled
 If ($Err.Count -gt 0) {
 Write-Host "ERROR. Can NOT set Windows Firewall Profiles" -ForegroundColor Red 
 Write-Log "ERROR. Can NOT set Windows Firewall Profiles"
@@ -32,7 +31,6 @@ Write-Log "Windows Firewall DISABLED" }
 
 ### IPv6 Disable
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\services\TCPIP6\Parameters' -Name DisabledComponents -Value 0xffffffff -ErrorVariable err
-#Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\services\TCPIP6\Parameters' -Name DisabledComponents  
 If ($Err.Count -gt 0) {
 Write-Host "ERROR. Can NOT Disable IPv6" -ForegroundColor Red 
 Write-Log "ERROR. Can NOT Disable IPv6"
