@@ -1,4 +1,5 @@
-﻿#
+#
+# VM initial configuration after deployment
 # Run this script as administrator
 #
 
