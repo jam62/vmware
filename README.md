@@ -1,5 +1,5 @@
 # vmware
-PowerCLI scripts for VMWare / vCenter
+PowerCLI scripts for VMware / vCenter
 --------------------------------------
 
 Set-CustomAttributes.ps1  - Sets custom attributes for VM, including VM creation time.
