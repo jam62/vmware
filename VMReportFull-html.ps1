@@ -28,7 +28,7 @@ $VMHostlist = Get-VMHost -State Connected| sort-object | select name -Unique
     
     foreach($VMHost in $VMHostList.name) {
     $VMHostTable = @()
-    Write-Host "`n----------- Сервер: $VMHost -----------"
+    Write-Host "`n----------- Server: $VMHost -----------"
     $esxi = get-vmhost $vmhost
     $model = $esxi.Manufacturer +" "+ $esxi.Model
 
@@ -44,6 +44,7 @@ $VMHostlist = Get-VMHost -State Connected| sort-object | select name -Unique
         "Model" =  $model
         "CPU " = $esxi.ProcessorType
         "CPU Cores" = $esxi.NumCpu
+        "CPU Threads " = $esxi.NumCpu * 2
         "CPU Total MHz" = $CpuMhzTotal
         "CPU Usage MHz" = $CpuMhzUsage
         "CPU Usage %" = $CPUUsagePercent
@@ -92,18 +93,23 @@ Foreach  ($folder in $folders)
     $VMTable = @()
     $FolderCPU = 0
     $FolderMemorySet = 0
+    $FolderMemoryUse = 0
     $FolderStorageUse = 0
+    
     Write-Host "`n----------- Папка: $folder -----------"
     
-    $vms = (Get-VM -Location $folder) | sort
+    $vms = (Get-VM -Location $folder -NoRecursion) | sort
         # Foreach VM
         Foreach ($vm in $vms)  
         {
         $vmname = $VM.name 
         $vmHostName = $vm.Guest.HostName
         $NumCPU = $vm.NumCpu
+        
         $MemorySet = $vm.MemoryGB
-        $MemoryUse = [math]::Round(($vm | get-view).summary.QuickStats.GuestMemoryUsage/1024,2)
+        $MemoryUse = ($vm | get-view).summary.QuickStats.GuestMemoryUsage
+        $MemoryUseGB = [math]::Round($MemoryUse/1024,2)
+        
         $StorageUse = [math]::Round($VM.UsedSpaceGB)
         $ProvisionedSpace = [math]::round($VM.ProvisionedSpaceGB)
                 
@@ -140,7 +146,7 @@ Foreach  ($folder in $folders)
             "HostName" = $vmHostName
             "CPU" = $NumCPU
             "Memory(Gb)" = $MemorySet
-            "MemoryUsed(Gb)" = $MemoryUse
+            "MemoryUsed(Gb)" = $MemoryUseGB
             "StorageUsed(Gb)" = $StorageUse
             "MaxVMSize(Gb)" = $ProvisionedSpace
             "IP" = $ips
@@ -163,6 +169,7 @@ Foreach  ($folder in $folders)
 
         } # Foreach VM end
 
+        $FolderMemoryUseGB = [math]::Round($FolderMemoryUse/1024,2)
         $Report += $VMTable |ConvertTo-HTML -Fragment -PreContent "<h3>Folder: $folder</h3>" | Out-String 
 
     Write-Host "-----------" 
@@ -172,31 +179,75 @@ Foreach  ($folder in $folders)
         "Folder Summary" = $folder
         "VM Count" = $vms.count
         "CPU Cores Used" = $FolderCPU
-        "Memory(GB) Summary" = $FolderMemorySet
-        "Storage Used(Gb) Summary" = $FolderStorageUse
+        "Memory Set Summary (GB)" = $FolderMemorySet
+        "Memory Used Summary(GB)" = $FolderMemoryUseGb
+        "Storage Used Summary(Gb)" = $FolderStorageUse
         }
 
     $AllVMCount += $vms.count
     $AllCPU += $FolderCPU
-    $AllMemorySet += $FolderMemorySet
+    #$AllMemorySet += $FolderMemorySet
     
     $Report += $FolderSummary | ConvertTo-HTML -Fragment | Out-String
     } # Foreach  folder end
- 
-$poweredvmcount = (get-vm | where PowerState -eq "PoweredOn").count
-$OverAllVMCount = (get-vM).count
+
+# PoweredOn VM Summary
+
+$PoweredOnVM = get-vm | where PowerState -eq "PoweredOn"
+$PoweredOnVMcount = $PoweredOnVM.count
+$PoweredOnCPUCoresUsed = ($PoweredOnVM | measure-object -Property numcpu -sum).Sum
+$PoweredOnMemorySet = ($PoweredOnVM | measure-object -Property MemoryGB -sum).Sum
+$PoweredOnStorageUse = [math]::Round(($PoweredOnVM | measure-object -Property UsedSpaceGB -sum).Sum)
+
+$PoweredOnSummary = [PSCustomObject] @{
+        
+        "PoweredOn VM" = $PoweredOnVMcount
+        "CPU Cores Used" = $PoweredOnCPUCoresUsed
+        "PoweredOn VM Memory Set(GB)" = "{0:N0}" -f $PoweredOnMemorySet
+        "PoweredOn Storage Used Summary(Gb)" = $PoweredOnStorageUse
+}
+
+$Report += $PoweredOnSummary | ConvertTo-HTML -Fragment -PreContent "<h3>Powered On VM Summary</h3>" | Out-String
+
+# Powered Off VM Summary
+
+$PoweredOffVM = get-vm | where PowerState -eq "PoweredOff"
+$PoweredOffVMcount = $PoweredOffVM.count
+$PoweredOffCPUCoresUsed = ($PoweredOffVM | measure-object -Property numcpu -sum).Sum
+$PoweredOffMemorySet = ($PoweredOffVM | measure-object -Property MemoryGB -sum).Sum
+$PoweredOffStorageUse = [math]::Round(($PoweredOffVM | measure-object -Property UsedSpaceGB -sum).Sum)
+
+$PoweredOffSummary = [PSCustomObject] @{
+        
+        "PoweredOff VM" = $PoweredOffVMcount
+        "CPU Cores Assigned" = $PoweredOffCPUCoresUsed
+        "PoweredOff VM Memory Set(GB)" = "{0:N0}" -f $PoweredOffMemorySet
+        "PoweredOff Storage Used Summary(Gb)" = $PoweredOffStorageUse
+}
+
+$Report += $PoweredOffSummary | ConvertTo-HTML -Fragment -PreContent "<h3>Powered Off VM Summary</h3>" | Out-String
+
+
+# Overall VM Summary
+
+$CPUCoresAssigned = (get-vm | measure-object -Property numcpu -sum).Sum
+$OverAllVMCount = (get-vm).count
+$AllMemorySet = (get-vm | measure-object -Property MemoryGB -sum).Sum
+$StorageUsedSummary = [math]::Round((get-vm | measure-object -Property UsedSpaceGB -sum).Sum)
 
 Write-Host "`n---------------------------------------" 
 Write-Host "Всего папок: "$folders.count""
 Write-Host "Всего ВМ во всех папках: $OverAllVMCount"
 
 $Overall = [PSCustomObject] @{
-        "Folders" =$folders.count
+        "Folders" = $folders.count
         "Overall VM Count" = $OverAllVMCount
-        "Powered On VM" = $poweredvmcount
-        "CPU Cores Used" = $AllCPU
-        "Memory(GB) Summary" = $AllMemorySet
-        "Storage Used(Gb) Summary" = $FolderStorageUse
+        "Powered On VM" = $PoweredOnVMcount
+        "Powered Off VM" = $PoweredOffVMcount
+        "CPU Cores Assigned" = $CPUCoresAssigned
+        "CPU Cores Used" = $PoweredOnCPUCoresUsed
+        "Memory Set(GB)" = "{0:N0}" -f $AllMemorySet
+        "Storage Used Summary(Gb)" = $StorageUsedSummary
 }
 
 $Report += $Overall | ConvertTo-HTML -Fragment -PreContent "<h3>Overall Summary</h3>" | Out-String
@@ -213,6 +264,7 @@ table {border-collapse: collapse;width: 100%;}
 table, th, td {border: 1px solid black;height: 25px;text-align: Center;font-weight: bold;}
 </style>
 "@
+
 
 ConvertTo-HTML -head $head -PostContent $Report -Body "<h2>VM Inventory for $VIserver ($date)</h2>" | Set-Content -Path $HTMLPath -Encoding UTF8 -ErrorAction Stop
 
