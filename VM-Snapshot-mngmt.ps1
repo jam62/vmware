@@ -49,8 +49,7 @@ $stimeout = 90                                                 # Время ож
 
 $Scriptpath = Split-Path $MyInvocation.MyCommand.path
 $user = "robot@vsphere.local"
-$pscred = $Scriptpath+"\pscred_ldsmn.txt"
-#$pscred = "C:\Scripts\Snapshot-mngmt\pscred.txt"
+$pscred = $Scriptpath+"\pscred_robot.txt"
 $pwd = get-content $pscred | convertto-securestring -Key(1..24) 
 $pwd.Makereadonly()
 $cred = New-Object System.Management.Automation.PsCredential $user, $pwd
